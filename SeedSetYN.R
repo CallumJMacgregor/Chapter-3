@@ -57,53 +57,16 @@ p2a
 
 ### analysis
 
-## glm
-
-model1 <- glm(SeedSetYN ~ Light + Regime + Pollinators + fDistance,
-              family = binomial
-              (link = "logit"),
-              data = dframe1)
-
-summary(model1)
-drop1(model1, test = "Chi")
-
-# fine, but does pseudoreplication of plot, round and plant have an impact?:
-
 ## glmm
 
-model2 <- glmer(SeedSetYN ~ Light + Regime + Pollinators + Distance
-                +(1|fPlot) + (1|fPlantNo) + (1|fRound),
-                family = binomial (link = "logit"),
-                data = dframe1)
-
-summary(model2)
-drop1(model2, test = "Chi")
-
-# nice, but model is rank deficient due to confounding of light and regime. Try combining them?:
-
-model3 <- glmer(SeedSetYN ~ Treatment + Pollinators + Distance
-                +(1|fPlot) + (1|fPlantNo) + (1|fRound),
-                family = binomial (link = "logit"),
-                data = dframe1)
-
-summary(model3)
-drop1(model3, test = "Chi")
-
-# model failed to converge - recheck convergence with:
-
-relgrad <- with(model3@optinfo$derivs,solve(Hessian,gradient))
-max(abs(relgrad))
-
-# convergence =~ 0.001 - not a huge problem but inspect rand effs - fPlot has very low variance so try removing
-
-model4 <- glmer(SeedSetYN ~ Treatment + Pollinators + Distance
+model1 <- glmer(SeedSetYN ~ Treatment + Pollinators + Distance
                 + (1|fPlantNo) + (1|fRound),
                 family = binomial (link = "logit"),
                 data = dframe1)
 
-summary(model4)
-drop1(model4, test = "Chi")
-Anova(model4, test = "Chi")
+summary(model1)
+drop1(model1, test = "Chi")
+Anova(model1, test = "Chi")
 
 relgrad <- with(model4@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad))
