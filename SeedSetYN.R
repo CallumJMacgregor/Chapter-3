@@ -4,7 +4,7 @@
 
 .libPaths(c("C:\\rlib", .libPaths()))
 setwd("C:\\Users\\461776\\Dropbox\\PhD Hull\\Work\\Data and analysis\\Chapter 3\\Chapter-3")
-dframe1 <- read.csv("SeedSetYN.csv")
+dframe1 <- read.csv("Data\\SeedSetYN.csv")
 # dframe1 <- read.csv(file.choose())
 
 names(dframe1)
