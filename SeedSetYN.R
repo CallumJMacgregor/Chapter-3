@@ -113,12 +113,3 @@ max(abs(relgrad))
 # Given confounding of light & regime, is LRT appropriate? Is there another way to construct the model?
 
 
-
-
-model3 <- glmer(SeedSetYN ~ Light*Regime + Pollinators + Distance
-                +(1|fPlot) + (1|fPlantNo) + (1|fRound),
-                family = binomial (link = "logit"),
-                data = dframe1)
-
-summary(model3)
-drop1(model3, test = "Chi")
