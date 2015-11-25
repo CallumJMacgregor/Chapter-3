@@ -21,6 +21,7 @@ summary(dframe1)
 
 with(dframe1,table(Plot,Round)) # seedheads per plot and round - fairly even spread, no obvious patterns, good
 
+
 #use install.packages("lme4"), install.packages("car") if necessary
 library(lme4)  # loading up the libraries
 library(car)
@@ -70,6 +71,14 @@ multiplot(p1, d1, p2, d2, p3, d3, p4, d4, p5, d5, cols=5)
 
 
 ### analysis
+
+## nested anova
+
+ano1 <- aov(SeedSetYN ~ Light*Regime, dframe1)
+summary(ano1)
+
+ano2 <- aov(SeedSetYN ~ Regime/Light, dframe1)
+summary(ano2)
 
 ## glm
 
@@ -122,7 +131,55 @@ Anova(model4, test = "Chi")
 relgrad <- with(model4@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad))
 
+
+
 # better convergence (now less than 0.001 so should be fine), but this model says treatment only marginally significant with LRT.
 # (Incidentally, significant with Type II Wald, but this is a worse test, and no good reason to use it here)
-# Given confounding of light & regime, is LRT appropriate? Is there another way to construct the model?
+# Given confounding of light & regime, LRT appropriate? Is there another way to construct the model?
 
+
+# how about analysing each confounded variable within subset of data?
+
+# so we could next examine effect of Regime, GIVEN that for a regime to exist, there must be lighting
+# therefore just within AllNight + Midnight Regime treatments. Dropping the Control will create a nice fully-crossed dataset for this model...
+
+dframe1a <- subset(dframe1,Regime!="Control") # Midnight + AllNight
+summary(dframe1a)
+
+model5 <- glmer(SeedSetYN ~ Light + Regime + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound),
+                family = binomial (link = "logit"),
+                data = dframe1a)
+
+summary(model5)
+drop1(model5, test = "Chi")
+
+relgrad <- with(model5@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # same issues with fPlot randeff on this model so exclude again
+
+# great, this worked nicely and allows us to say (1) there is no sig diff between HPS and LED lights;
+# and (2) there is a significantly higher rate of pollination under full-night lighting than part-night
+
+# but this doesn't answer any questions of lighting vs unlit... so what now?
+
+# could pool lighting treatments as 'lit' for each variable, but:
+# visual inspection of full dataset suggests that this might be problematic; there is a strong risk of Type I error for Light. (But let's try and see!)
+
+dframe1$LitUnlit <- recode(dframe1$Light, "c('HPS','LED')='Lit'; else='Unlit'")
+
+# figure LitUnlit
+p6 <- ggplot(dframe1,aes(x=LitUnlit,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d6 <- qplot(LitUnlit, SeedSetYN, data=dframe1)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p6, d6, cols=2)
+
+model6 <- glmer(SeedSetYN ~ LitUnlit + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound),
+                family = binomial (link = "logit"),
+                data = dframe1)
+
+summary(model6)
+drop1(model6, test = "Chi") #effect of *being lit*, all else being equal, is non-sig'ly (v slightly) positive
