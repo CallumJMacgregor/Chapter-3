@@ -80,6 +80,9 @@ summary(ano1)
 ano2 <- aov(SeedSetYN ~ Regime/Light, dframe1)
 summary(ano2)
 
+# regime appears important, light not, but what about covariates and randeffs...
+
+
 ## glm
 
 model1 <- glm(SeedSetYN ~ Light + Regime + Pollinators + fDistance,
@@ -90,7 +93,7 @@ model1 <- glm(SeedSetYN ~ Light + Regime + Pollinators + fDistance,
 summary(model1)
 drop1(model1, test = "Chi")
 
-# fine, but does pseudoreplication of plot, round and plant have an impact?:
+# fine, but does pseudoreplication of plot, round and plant have an impact (randeffs)?:
 
 ## glmm
 
@@ -127,6 +130,7 @@ model4 <- glmer(SeedSetYN ~ Treatment + Pollinators + Distance
 summary(model4)
 drop1(model4, test = "Chi")
 Anova(model4, test = "Chi")
+glht(model4, mcp(Treatment="Tukey"))
 
 relgrad <- with(model4@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad))
@@ -157,15 +161,17 @@ drop1(model5, test = "Chi")
 relgrad <- with(model5@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # same issues with fPlot randeff on this model so exclude again
 
+
 # great, this worked nicely and allows us to say (1) there is no sig diff between HPS and LED lights;
-# and (2) there is a significantly higher rate of pollination under full-night lighting than part-night
+# and (2) there is a significantly higher rate of pollination under full-night lighting than part-night (bit weird!)
 
 # but this doesn't answer any questions of lighting vs unlit... so what now?
 
-# could pool lighting treatments as 'lit' for each variable, but:
+# could pool lighting treatments as 'lit':
 # visual inspection of full dataset suggests that this might be problematic; there is a strong risk of Type I error for Light. (But let's try and see!)
 
 dframe1$LitUnlit <- recode(dframe1$Light, "c('HPS','LED')='Lit'; else='Unlit'")
+dframe1$LitUnlit <- relevel(dframe1$LitUnlit, "Unlit")
 
 # figure LitUnlit
 p6 <- ggplot(dframe1,aes(x=LitUnlit,y=SeedSetYN))+
@@ -182,4 +188,162 @@ model6 <- glmer(SeedSetYN ~ LitUnlit + Pollinators + Distance
                 data = dframe1)
 
 summary(model6)
-drop1(model6, test = "Chi") #effect of *being lit*, all else being equal, is non-sig'ly (v slightly) positive
+drop1(model6, test = "Chi") #effect of *being lit*, all else being equal, is non-sig. So no Type I error.
+
+
+# just out of curiosity, what happens when you pretend regime doesn't exist...
+
+model7 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound),
+                family = binomial (link = "logit"),
+                data = dframe1)
+
+summary(model7)
+drop1(model7, test = "Chi")  # EVEN with all that variation attributable to Regime left to slot into the Light variable, Light is still non-significant.
+
+# but could that be because midnight=control masking an effect? Let's try and find a way to remove the midnight data from the model.
+
+dframe1b <- subset(dframe1,Regime!="Midnight") # Control + AllNight
+summary(dframe1b)
+
+model8 <- glmer(SeedSetYN ~ Light + Regime + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound),
+                family = binomial (link = "logit"),
+                data = dframe1)
+
+summary(model8)
+drop1(model8, test = "Chi") 
+
+## so this is still confounded. An alternative is to analyse the two lighting types separately, with Regime coded as All, Mid, and None (=Control) in each
+# first analyse HPS as the major form of lighting
+library(plyr)
+
+dframe1c <- subset(dframe1,Light!="LED") # HPS + CON in dataset
+dframe1c$Regime <- revalue(dframe1c$Regime, c("Control"="None"))
+dframe1c$Light  <- revalue(dframe1c$Light, c("CON"="HPS"))
+
+summary(dframe1c)
+
+# figure within HPS
+p7 <- ggplot(dframe1c,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d7 <- qplot(Regime, SeedSetYN, data=dframe1c)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p7, d7, cols=2)
+
+#glmm
+model9 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                family = binomial (link = "logit"),
+                data = dframe1c)
+
+summary(model9)
+drop1(model9, test = "Chi") 
+
+relgrad <- with(model9@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here is fine with fPlot in
+
+# looking solely within HPS lighting, there is a significant effect of regime on pollination (driven by AllNight);
+# how about with the new challenger, LED?
+
+dframe1d <- subset(dframe1,Light!="HPS") # LED + CON in dataset
+dframe1d$Regime <- revalue(dframe1d$Regime, c("Control"="None"))
+dframe1d$Light  <- revalue(dframe1d$Light, c("CON"="LED"))
+
+summary(dframe1d)
+
+# figure within HPS
+p8 <- ggplot(dframe1d,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d8 <- qplot(Regime, SeedSetYN, data=dframe1d)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p8, d8, cols=2)
+
+#glmm
+model10 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                family = binomial (link = "logit"),
+                data = dframe1d)
+
+summary(model10)
+drop1(model10, test = "Chi") 
+
+relgrad <- with(model10@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here is fine with fPlot in
+
+# so, with LED also there is a significant effect of regime on pollination (driven by AllNight)
+
+
+## how about a comparison between LED and HPS? Let's try the same tactic and break up AllNight & Midnight
+
+dframe1e <- subset(dframe1,Regime!="Midnight") # ALL + CON in dataset
+dframe1e$Regime <- revalue(dframe1e$Regime, c("Control"="AllNight"))
+
+summary(dframe1e)
+
+# figure within AllNight
+p9 <- ggplot(dframe1e,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d9 <- qplot(Light, SeedSetYN, data=dframe1e)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p9, d9, cols=2)
+
+#glmm
+model11 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound),
+                 family = binomial (link = "logit"),
+                 data = dframe1e)
+
+summary(model11)
+drop1(model11, test = "Chi") 
+
+relgrad <- with(model11@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+
+# no effect (marginally significant effect) of light within AllNight regime;
+# how about new challenger Midnight (= part-night)
+
+dframe1f <- subset(dframe1,Regime!="AllNight") # MID + CON in dataset
+dframe1f$Regime <- revalue(dframe1f$Regime, c("Control"="Midnight"))
+
+summary(dframe1f)
+
+# figure within Midnight
+p10 <- ggplot(dframe1f,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d10 <- qplot(Light, SeedSetYN, data=dframe1f)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p10, d10, cols=2)
+
+#glmm
+model12 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound),
+                 family = binomial (link = "logit"),
+                 data = dframe1f)
+
+summary(model12)
+drop1(model12, test = "Chi") 
+
+relgrad <- with(model12@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+
+# no significant effect of light within Midnight
+
+### SO. Probability of seed set is affected by:
+#(a) pollinator regime - both diurnal and nocturnal contribute (noct slightly more), with some redundancy.
+#(b) lighting regime - pollination significantly boosted under full night lighting, but no difference between unlit and part-night lighting
+# no difference between HPS and LED
+# no difference at different distances from 0-20m
+
+# although this is a positive effect for the plants under full-night streetlights, it is clear evidence of a disruption of overall pollination services
+# raises the question of what happens on a longer transect away from the light - at what distance does effect become negative; at what distance is there no effect?
+
+## next up - are there any effects on quality of pollination (seed count and weight)...
