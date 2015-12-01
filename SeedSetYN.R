@@ -83,7 +83,7 @@ summary(ano2)
 # regime appears important, light not, but what about covariates and randeffs...
 
 
-## glm
+## glm for covariates
 
 model1 <- glm(SeedSetYN ~ Light + Regime + Pollinators + fDistance,
               family = binomial
@@ -139,7 +139,7 @@ max(abs(relgrad))
 
 # better convergence (now less than 0.001 so should be fine), but this model says treatment only marginally significant with LRT.
 # (Incidentally, significant with Type II Wald, but this is a worse test, and no good reason to use it here)
-# Given confounding of light & regime, LRT appropriate? Is there another way to construct the model?
+# Given confounding of light & regime, is there another way to construct the model?
 
 
 # how about analysing each confounded variable within subset of data?
@@ -216,7 +216,7 @@ drop1(model8, test = "Chi")
 
 ## so this is still confounded. An alternative is to analyse the two lighting types separately, with Regime coded as All, Mid, and None (=Control) in each
 # first analyse HPS as the major form of lighting
-library(plyr)
+library(plyr) # required for 'revalue' function
 
 dframe1c <- subset(dframe1,Light!="LED") # HPS + CON in dataset
 dframe1c$Regime <- revalue(dframe1c$Regime, c("Control"="None"))
@@ -347,3 +347,289 @@ max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fin
 # raises the question of what happens on a longer transect away from the light - at what distance does effect become negative; at what distance is there no effect?
 
 ## next up - are there any effects on quality of pollination (seed count and weight)...
+
+### Quality of pollination ###
+
+dframe2 <- read.csv("Data\\SeedCount.csv")
+# dframe2 <- read.csv(file.choose())
+
+names(dframe2)
+
+dframe2$fPlot <- factor(dframe2$Plot) # treat "Plot", "Round", "PlantNo" as factors
+dframe2$fRound <- factor(dframe2$Round)
+dframe2$fPlantNo <- factor(dframe2$PlantNo)
+dframe2$fDistance <- factor(dframe2$Distance) # make "Distance" available as a factor if reqd
+
+dframe2$Regime <- relevel(dframe2$Regime,"Control") # relevel variables related to control level
+dframe2$Pollinators <- relevel(dframe2$Pollinators,"Control")
+
+summary(dframe2)
+
+with(dframe2,table(Plot,Round)) # seedheads per plot and round - fairly even spread, no obvious patterns other than round 1 very poor, good
+
+### plots
+
+hist(dframe2$SeedWeight)
+hist(dframe2$SeedCount) # check variable distributions - both appear to be Poisson (seed count possibly overdispersed - check this)
+
+# SeedCount
+
+# figure Light
+p11 <- ggplot(dframe2,aes(x=Light,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d11 <- qplot(Light, SeedCount, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Regime
+p12 <- ggplot(dframe2,aes(x=Regime,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d12 <- qplot(Regime, SeedCount, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Treatment - Light and Regime combined
+p13 <- ggplot(dframe2,aes(x=Treatment,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d13 <- qplot(Treatment, SeedCount, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Pollinators
+p14 <- ggplot(dframe2,aes(x=Pollinators,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d14 <- qplot(Pollinators, SeedCount, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Distance
+p15 <- ggplot(dframe2,aes(x=Distance,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d15 <- qplot(Distance, SeedCount, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p11, d11, p12, d12, p13, d13, p14, d14, p15, d15, cols=5) # no obvious trends, CIs seem to overlap in most cases. HPS vs LED possibly?
+
+
+### analysis
+
+## nested anova
+
+ano3 <- aov(SeedCount ~ Light*Regime, dframe2)
+summary(ano3)
+
+ano4 <- aov(SeedCount ~ Regime/Light, dframe2)
+summary(ano4)
+
+# Light appears important, possible Light:Regime interaction too, but what about covariates and randeffs...
+
+
+## glm for covariates
+
+model13 <- glm(SeedCount ~ Light + Regime + Pollinators + fDistance,
+              family = poisson
+              (link = "log"),
+              data = dframe2)
+
+summary(model13)
+drop1(model13, test = "Chi")
+
+# Fine, but does pseudoreplication of plot, round and plant have an impact (randeffs)?:
+
+
+## glmm
+
+model14 <- glmer(SeedCount ~ Light + Regime + Pollinators + Distance
+                +(1|fPlot) + (1|fPlantNo) + (1|fRound),
+                family = poisson (link = "log"),
+                data = dframe2)
+
+summary(model14)
+drop1(model14, test = "Chi")
+
+# Obviously first thing to note is that the same problems with confounding variables exist as above, so let's jump straight to the solution:
+# first analyse HPS as the major form of lighting
+
+dframe2a <- subset(dframe2,Light!="LED") # HPS + CON in dataset
+dframe2a$Regime <- revalue(dframe2a$Regime, c("Control"="None"))
+dframe2a$Light  <- revalue(dframe2a$Light, c("CON"="HPS"))
+
+summary(dframe2a)
+hist(dframe2a$SeedCount)
+
+# figure within HPS
+p16 <- ggplot(dframe2a,aes(x=Regime,y=SeedCount))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d16 <- qplot(Regime, SeedCount, data=dframe2a)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p16, d16, cols=2)
+
+#glmm
+model15 <- glmer(SeedCount ~ Regime + Pollinators + Distance
+                + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                family = poisson (link = "log"),
+                data = dframe2a)
+
+summary(model15)
+drop1(model15, test = "Chi") 
+
+# full dataset looked overdispersed, as does histogram, so first check this
+
+mean(dframe2a$SeedCount)
+var(dframe2a$SeedCount)
+
+source("OverdispersalFunction.R")
+overdisp_fun(model15)
+
+# Yes, overdispersed! Quite badly, so let's try a negative binomial...
+
+model16 <- glmer.nb(SeedCount ~ Regime + Pollinators + Distance
+                    + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                    data = dframe2a)
+
+summary(model16)
+drop1(model16, test = "Chi")
+
+relgrad <- with(model16@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge but nothing to worry about
+
+# No significant effect of Regime on seed count within HPS. What about LED?
+
+
+
+
+library(MASS)
+
+model16 <- glmmPQL(SeedCount ~  Regime + Pollinators + Distance,
+                  random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                  family = quasipoisson (link = "log"),
+                  data = dframe2a)
+
+
+summary(model16)   # Various formats of model summaries
+Anova(model16, type="III")
+
+
+model16a <- glmmPQL(SeedCount ~   Regime + Pollinators + Distance,
+                  random = ~1|fRound, #Random effects
+                  family = quasipoisson (link = "log"),
+                  data = dframe2a)
+
+summary(model16a)
+Anova(model16, type="III")
+
+
+
+
+
+
+
+
+
+
+
+# looking solely within HPS lighting, there is a significant effect of regime on pollination (driven by AllNight);
+# how about with the new challenger, LED?
+
+dframe1d <- subset(dframe1,Light!="HPS") # LED + CON in dataset
+dframe1d$Regime <- revalue(dframe1d$Regime, c("Control"="None"))
+dframe1d$Light  <- revalue(dframe1d$Light, c("CON"="LED"))
+
+summary(dframe1d)
+
+# figure within HPS
+p8 <- ggplot(dframe1d,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d8 <- qplot(Regime, SeedSetYN, data=dframe1d)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p8, d8, cols=2)
+
+#glmm
+model10 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 family = binomial (link = "logit"),
+                 data = dframe1d)
+
+summary(model10)
+drop1(model10, test = "Chi") 
+
+relgrad <- with(model10@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here is fine with fPlot in
+
+# so, with LED also there is a significant effect of regime on pollination (driven by AllNight)
+
+
+## how about a comparison between LED and HPS? Let's try the same tactic and break up AllNight & Midnight
+
+dframe1e <- subset(dframe1,Regime!="Midnight") # ALL + CON in dataset
+dframe1e$Regime <- revalue(dframe1e$Regime, c("Control"="AllNight"))
+
+summary(dframe1e)
+
+# figure within AllNight
+p9 <- ggplot(dframe1e,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d9 <- qplot(Light, SeedSetYN, data=dframe1e)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p9, d9, cols=2)
+
+#glmm
+model11 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound),
+                 family = binomial (link = "logit"),
+                 data = dframe1e)
+
+summary(model11)
+drop1(model11, test = "Chi") 
+
+relgrad <- with(model11@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+
+# no effect (marginally significant effect) of light within AllNight regime;
+# how about new challenger Midnight (= part-night)
+
+dframe1f <- subset(dframe1,Regime!="AllNight") # MID + CON in dataset
+dframe1f$Regime <- revalue(dframe1f$Regime, c("Control"="Midnight"))
+
+summary(dframe1f)
+
+# figure within Midnight
+p10 <- ggplot(dframe1f,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d10 <- qplot(Light, SeedSetYN, data=dframe1f)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p10, d10, cols=2)
+
+#glmm
+model12 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound),
+                 family = binomial (link = "logit"),
+                 data = dframe1f)
+
+summary(model12)
+drop1(model12, test = "Chi") 
+
+relgrad <- with(model12@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+
+# no significant effect of light within Midnight
+
+### SO
+
+
+
+
+
+
+
+
+
