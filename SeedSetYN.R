@@ -25,6 +25,7 @@ with(dframe1,table(Plot,Round)) # seedheads per plot and round - fairly even spr
 #use install.packages("lme4"), install.packages("car") if necessary
 library(lme4)  # loading up the libraries
 library(car)
+source("CheckResidsFunction.R") # a function for plotting glmer residuals (deviance and Pearson)
 
 ### plots
 
@@ -161,6 +162,7 @@ drop1(model5, test = "Chi")
 relgrad <- with(model5@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # same issues with fPlot randeff on this model so exclude again
 
+chkres(model5) # ok, not amazing, but not final model so not going to worry right now!
 
 # great, this worked nicely and allows us to say (1) there is no sig diff between HPS and LED lights;
 # and (2) there is a significantly higher rate of pollination under full-night lighting than part-night (bit weird!)
@@ -190,6 +192,7 @@ model6 <- glmer(SeedSetYN ~ LitUnlit + Pollinators + Distance
 summary(model6)
 drop1(model6, test = "Chi") #effect of *being lit*, all else being equal, is non-sig. So no Type I error.
 
+chkres(model6)
 
 # just out of curiosity, what happens when you pretend regime doesn't exist...
 
@@ -236,7 +239,7 @@ multiplot(p7, d7, cols=2)
 #glmm
 model9 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
-                family = binomial (link = "logit"),
+                family = binomial (link = "cauchit"),
                 data = dframe1c)
 
 summary(model9)
@@ -244,6 +247,10 @@ drop1(model9, test = "Chi")
 
 relgrad <- with(model9@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here is fine with fPlot in
+
+chkres(model9) # kind of bimodal. worth trying another link function? Done - logit is best option (and not too bad really)
+# bit of a pattern in the binned plot but generally don't need to worry with Bernoulli GLM
+
 
 # looking solely within HPS lighting, there is a significant effect of regime on pollination (driven by AllNight);
 # how about with the new challenger, LED?
@@ -274,6 +281,8 @@ drop1(model10, test = "Chi")
 
 relgrad <- with(model10@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here is fine with fPlot in
+
+chkres(model10) # residuals fine
 
 # so, with LED also there is a significant effect of regime on pollination (driven by AllNight)
 
@@ -306,6 +315,8 @@ drop1(model11, test = "Chi")
 relgrad <- with(model11@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
 
+chkres(model11)
+
 # no effect (marginally significant effect) of light within AllNight regime;
 # how about new challenger Midnight (= part-night)
 
@@ -334,6 +345,8 @@ drop1(model12, test = "Chi")
 
 relgrad <- with(model12@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+
+chkres(model12)
 
 # no significant effect of light within Midnight
 
@@ -496,6 +509,8 @@ drop1(model16, test = "Chi")
 relgrad <- with(model16@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here does not converge but nothing to worry about
 
+chkres(model16) # good enough...
+
 # No significant effect of Regime on seed count within HPS. What about LED?
 
 
@@ -539,6 +554,21 @@ model18 <- glmmPQL(SeedCount ~   Regime + Pollinators + Distance,
 summary(model18)
 Anova(model18, type = "III")
 
+plot(model18)
+chkres(model18) # big patterns in residuals. Probably better try a NB model.
+
+
+model18a <- glmer.nb(SeedCount ~ Regime + Pollinators + Distance
+                     + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                     data = dframe2b)
+summary(model18a)
+drop1(model18a, test = "Chi")
+
+relgrad <- with(model18a@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge but nothing to worry about
+
+chkres(model18a) #much better...
+
 # no significant effect of regime on seed count in LED either.
 ## how about a comparison between LED and HPS?
 
@@ -579,6 +609,21 @@ model20 <- glmmPQL(SeedCount ~   Light + Pollinators + Distance,
                    data = dframe2c)
 summary(model20)
 Anova(model20, type = "III")
+
+plot(model20)
+chkres(model20) # again suggestion of a pattern so let's try NB
+
+model20a <- glmer.nb(SeedCount ~ Light + Pollinators + Distance
+                     + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                     data = dframe2c)
+
+relgrad <- with(model20a@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge but nothing to worry about
+
+summary(model20a)
+drop1(model20a, test = "Chi")
+
+chkres(model20a) # not amazing but definite improvement
 
 # no effect of light within full-night, finally let's check part-night
 
@@ -631,6 +676,15 @@ drop1(model23, test = "Chi")
 relgrad <- with(model23@optinfo$derivs,solve(Hessian,gradient))
 max(abs(relgrad)) # model here does not converge but nothing to worry about
 
+# chkres function needs debugging for here - in the meantime...
+plot(model23)
+sresid <- resid(model23, type = "deviance")
+hist(sresid)
+fitted.glmm <- fitted(model23, level=1)        # Extract the fitted (predicted) values
+plot(sresid ~ fitted.glmm)                   # Check for homoscedasticity
+binnedplot(fitted(model23),resid(model23))
+
+# these all look fine
 # *significant* effect of light within Midnight - seed count significantly higher under HPS than LED
 
 ### SO. Only effect of light on seed count is that LED causes less disruption than HPS under midnight switch-offs.
