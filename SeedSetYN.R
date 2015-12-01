@@ -499,131 +499,141 @@ max(abs(relgrad)) # model here does not converge but nothing to worry about
 # No significant effect of Regime on seed count within HPS. What about LED?
 
 
+dframe2b <- subset(dframe2,Light!="HPS") # LED + CON in dataset
+dframe2b$Regime <- revalue(dframe2b$Regime, c("Control"="None"))
+dframe2b$Light  <- revalue(dframe2b$Light, c("CON"="LED"))
 
-
-library(MASS)
-
-model16 <- glmmPQL(SeedCount ~  Regime + Pollinators + Distance,
-                  random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
-                  family = quasipoisson (link = "log"),
-                  data = dframe2a)
-
-
-summary(model16)   # Various formats of model summaries
-Anova(model16, type="III")
-
-
-model16a <- glmmPQL(SeedCount ~   Regime + Pollinators + Distance,
-                  random = ~1|fRound, #Random effects
-                  family = quasipoisson (link = "log"),
-                  data = dframe2a)
-
-summary(model16a)
-Anova(model16, type="III")
-
-
-
-
-
-
-
-
-
-
-
-# looking solely within HPS lighting, there is a significant effect of regime on pollination (driven by AllNight);
-# how about with the new challenger, LED?
-
-dframe1d <- subset(dframe1,Light!="HPS") # LED + CON in dataset
-dframe1d$Regime <- revalue(dframe1d$Regime, c("Control"="None"))
-dframe1d$Light  <- revalue(dframe1d$Light, c("CON"="LED"))
-
-summary(dframe1d)
+summary(dframe2b)
 
 # figure within HPS
-p8 <- ggplot(dframe1d,aes(x=Regime,y=SeedSetYN))+
+p17 <- ggplot(dframe2b,aes(x=Regime,y=SeedCount))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d8 <- qplot(Regime, SeedSetYN, data=dframe1d)+
+d17 <- qplot(Regime, SeedCount, data=dframe2b)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-multiplot(p8, d8, cols=2)
+multiplot(p17, d17, cols=2)
 
-#glmm
-model10 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
+hist(dframe2b$SeedCount)
+
+mean(dframe2b$SeedCount)
+var(dframe2b$SeedCount)
+
+model17 <- glmer(SeedCount ~ Regime + Pollinators + Distance
                  + (1|fPlantNo) + (1|fRound) + (1|fPlot),
-                 family = binomial (link = "logit"),
-                 data = dframe1d)
+                 family = poisson (link = "log"),
+                 data = dframe2b)
 
-summary(model10)
-drop1(model10, test = "Chi") 
+summary(model17)
+drop1(model17, test = "Chi") 
 
-relgrad <- with(model10@optinfo$derivs,solve(Hessian,gradient))
-max(abs(relgrad)) # model here is fine with fPlot in
+source("OverdispersalFunction.R")
+overdisp_fun(model17)
 
-# so, with LED also there is a significant effect of regime on pollination (driven by AllNight)
+# Also overdispersed, not quite so bad so let's try QP first...
 
+model18 <- glmmPQL(SeedCount ~   Regime + Pollinators + Distance,
+                                     random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                                     family = quasipoisson (link = "log"),
+                                     data = dframe2b)
+summary(model18)
+Anova(model18, type = "III")
 
-## how about a comparison between LED and HPS? Let's try the same tactic and break up AllNight & Midnight
+# no significant effect of regime on seed count in LED either.
+## how about a comparison between LED and HPS?
 
-dframe1e <- subset(dframe1,Regime!="Midnight") # ALL + CON in dataset
-dframe1e$Regime <- revalue(dframe1e$Regime, c("Control"="AllNight"))
+dframe2c <- subset(dframe2,Regime!="Midnight") # ALL + CON in dataset
+dframe2c$Regime <- revalue(dframe2c$Regime, c("Control"="AllNight"))
 
-summary(dframe1e)
+summary(dframe2c)
+hist(dframe2c$SeedCount)
 
 # figure within AllNight
-p9 <- ggplot(dframe1e,aes(x=Light,y=SeedSetYN))+
+p18 <- ggplot(dframe2c,aes(x=Light,y=SeedCount))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d9 <- qplot(Light, SeedSetYN, data=dframe1e)+
+d18 <- qplot(Light, SeedCount, data=dframe2c)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-multiplot(p9, d9, cols=2)
+multiplot(p18, d18, cols=2)
 
-#glmm
-model11 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
-                 + (1|fPlantNo) + (1|fRound),
-                 family = binomial (link = "logit"),
-                 data = dframe1e)
+mean(dframe2c$SeedCount)
+var(dframe2c$SeedCount) #can tell this is going to be overdispersed!
 
-summary(model11)
-drop1(model11, test = "Chi") 
 
-relgrad <- with(model11@optinfo$derivs,solve(Hessian,gradient))
-max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+model19 <- glmer(SeedCount ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 family = poisson (link = "log"),
+                 data = dframe2c)
 
-# no effect (marginally significant effect) of light within AllNight regime;
-# how about new challenger Midnight (= part-night)
+summary(model19)
+drop1(model19, test = "Chi") 
 
-dframe1f <- subset(dframe1,Regime!="AllNight") # MID + CON in dataset
-dframe1f$Regime <- revalue(dframe1f$Regime, c("Control"="Midnight"))
+overdisp_fun(model19)
 
-summary(dframe1f)
+# Also overdispersed, not too bad so let's try QP first...
+
+model20 <- glmmPQL(SeedCount ~   Light + Pollinators + Distance,
+                   random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                   family = quasipoisson (link = "log"),
+                   data = dframe2c)
+summary(model20)
+Anova(model20, type = "III")
+
+# no effect of light within full-night, finally let's check part-night
+
+dframe2d <- subset(dframe2,Regime!="AllNight") # MID + CON in dataset
+dframe2d$Regime <- revalue(dframe2d$Regime, c("Control"="Midnight"))
+
+summary(dframe2d)
 
 # figure within Midnight
-p10 <- ggplot(dframe1f,aes(x=Light,y=SeedSetYN))+
+p19 <- ggplot(dframe2d,aes(x=Light,y=SeedCount))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d10 <- qplot(Light, SeedSetYN, data=dframe1f)+
+d19 <- qplot(Light, SeedCount, data=dframe2d)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-multiplot(p10, d10, cols=2)
+multiplot(p19, d19, cols=2)
 
-#glmm
-model12 <- glmer(SeedSetYN ~ Light + Pollinators + Distance
-                 + (1|fPlantNo) + (1|fRound),
-                 family = binomial (link = "logit"),
-                 data = dframe1f)
+hist(dframe2d$SeedCount)
+mean(dframe2d$SeedCount)
+var(dframe2d$SeedCount) #can tell this is going to be overdispersed too!
 
-summary(model12)
-drop1(model12, test = "Chi") 
+model21 <- glmer(SeedCount ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 family = poisson (link = "log"),
+                 data = dframe2d)
 
-relgrad <- with(model12@optinfo$derivs,solve(Hessian,gradient))
-max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fine thereafter)
+summary(model21)
+drop1(model21, test = "Chi") 
 
-# no significant effect of light within Midnight
+overdisp_fun(model21)
 
-### SO
+# Also overdispersed, try QP first...
+
+model22 <- glmmPQL(SeedCount ~   Light + Pollinators + Distance,
+                   random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                   family = quasipoisson (link = "log"),
+                   data = dframe2d)
+summary(model22)
+Anova(model22, type = "III")
+
+# not quite happy with those NaNs, which have occurred because residual DFs are negative (probably too little data?)
+# try a NB and see if it's any better...
+
+model23 <- glmer.nb(SeedCount ~ Light + Pollinators + Distance
+                    + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                    data = dframe2d)
+summary(model23)
+drop1(model23, test = "Chi")
+
+relgrad <- with(model23@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad)) # model here does not converge but nothing to worry about
+
+# *significant* effect of light within Midnight - seed count significantly higher under HPS than LED
+
+### SO. Only effect of light on seed count is that LED causes less disruption than HPS under midnight switch-offs.
 
 
 
