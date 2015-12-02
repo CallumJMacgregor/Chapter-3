@@ -690,10 +690,245 @@ binnedplot(fitted(model23),resid(model23))
 ### SO. Only effect of light on seed count is that LED causes less disruption than HPS under midnight switch-offs.
 
 
+# finally, how about seed weight?
+
+summary(dframe2)
+
+### plots
+
+hist(dframe2$SeedWeight) # check variable distribution - appears to be approx Poisson but not integers so options?
+hist(log(dframe2$SeedWeight),10) # Gaussian-ish when logged
+
+dframe2$lSeedWeight <- log(dframe2$SeedWeight,10)
+hist(dframe2$lSeedWeight)
+
+# SeedCount
+
+# figure Light
+p20 <- ggplot(dframe2,aes(x=Light,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d20 <- qplot(Light, lSeedWeight, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Regime
+p21 <- ggplot(dframe2,aes(x=Regime,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d21 <- qplot(Regime, lSeedWeight, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Treatment - Light and Regime combined
+p22 <- ggplot(dframe2,aes(x=Treatment,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d22 <- qplot(Treatment, lSeedWeight, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Pollinators
+p23 <- ggplot(dframe2,aes(x=Pollinators,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d23 <- qplot(Pollinators, lSeedWeight, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+# figure Distance
+p24 <- ggplot(dframe2,aes(x=Distance,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d24 <- qplot(Distance, lSeedWeight, data=dframe2)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p20, d20, p21, d21, p22, d22, p23, d23, p24, d24, cols=5) # no obvious trends, CIs seem to overlap in most cases.
 
 
+### analysis
+
+## nested anova
+
+ano5 <- aov(lSeedWeight ~ Light*Regime, dframe2)
+summary(ano5)
+
+ano6<- aov(lSeedWeight ~ Regime/Light, dframe2)
+summary(ano6)
+
+# Nothing really stands out
 
 
+## glm for covariates
+
+model24 <- glm(lSeedWeight ~ Light + Regime + Pollinators + fDistance,
+               family = gaussian
+               (link = "identity"),
+               data = dframe2)
+
+summary(model24)
+drop1(model24, test = "Chi")
+
+# Fine, but does pseudoreplication of plot, round and plant have an impact (randeffs)?:
 
 
+## glmm
 
+model25 <- lmer(lSeedWeight ~ Light + Regime + Pollinators + Distance
+                 +(1|fPlot) + (1|fPlantNo) + (1|fRound),
+                 data = dframe2)
+
+summary(model25)
+drop1(model25, test = "Chi")
+
+# Obviously first thing to note is that the same problems with confounding variables exist as above, so let's jump straight to the solution:
+# first analyse HPS as the major form of lighting
+
+#re-do these to include lSeedWeight
+dframe2a <- subset(dframe2,Light!="LED") # HPS + CON in dataset
+dframe2a$Regime <- revalue(dframe2a$Regime, c("Control"="None"))
+dframe2a$Light  <- revalue(dframe2a$Light, c("CON"="HPS"))
+
+summary(dframe2a)
+hist(dframe2a$lSeedWeight)
+
+# figure within HPS
+p25 <- ggplot(dframe2a,aes(x=Regime,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d25 <- qplot(Regime, lSeedWeight, data=dframe2a)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p25, d25, cols=2)
+
+#glmm
+model26 <- lmer(lSeedWeight ~ Regime + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 data = dframe2a)
+
+summary(model26)
+drop1(model26, test = "Chi") 
+
+chkres(model26) # OK, though not amazing
+
+# No significant effect of Regime on seed weight within HPS. What about LED?
+
+
+dframe2b <- subset(dframe2,Light!="HPS") # LED + CON in dataset
+dframe2b$Regime <- revalue(dframe2b$Regime, c("Control"="None"))
+dframe2b$Light  <- revalue(dframe2b$Light, c("CON"="LED"))
+
+summary(dframe2b)
+hist(dframe2b$lSeedWeight)
+
+# figure within HPS
+p26 <- ggplot(dframe2b,aes(x=Regime,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d26 <- qplot(Regime, lSeedWeight, data=dframe2b)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p26, d26, cols=2)
+
+model27 <- lmer(SeedWeight ~ Regime + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 data = dframe2b)
+
+summary(model27)
+drop1(model27, test = "Chi") 
+
+chkres(model27) # Slight trend in sresid vs fitted. Maybe let's have a play with this one...
+
+# remember that lmm(lg(dat)) =/= lg.glmm(dat)
+
+model27a <- glmmPQL(SeedWeight ~ Regime + Pollinators + Distance,
+                    random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot),
+                    family = gaussian (link = "log"),
+                    data = dframe2b)
+
+chkres.PQL(model27a)
+#these are better!
+
+summary(model27a)
+Anova(model27a, type = "III")
+
+# no significant effect of regime on seed weight in LED either.
+## how about a comparison between LED and HPS?
+
+dframe2c <- subset(dframe2,Regime!="Midnight") # ALL + CON in dataset
+dframe2c$Regime <- revalue(dframe2c$Regime, c("Control"="AllNight"))
+
+summary(dframe2c)
+hist(dframe2c$SeedWeight)
+hist(dframe2c$lSeedWeight)
+
+# figure within AllNight
+p27 <- ggplot(dframe2c,aes(x=Light,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d27 <- qplot(Light, lSeedWeight, data=dframe2c)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p27, d27, cols=2)
+
+model28 <- lmer(lSeedWeight ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 data = dframe2c)
+
+summary(model28)
+drop1(model28, test = "Chi") 
+
+chkres(model28) # pretty bad. try a PQL
+
+# Also overdispersed, not too bad so let's try QP first...
+
+model28a <- glmmPQL(SeedWeight ~   Light + Pollinators + Distance,
+                   random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                   family = gaussian (link = "log"),
+                   data = dframe2c)
+
+chkres.PQL(model28a) #better
+
+summary(model28a)
+Anova(model28a, type = "III")
+
+# no effect of light within full-night, finally let's check part-night
+
+dframe2d <- subset(dframe2,Regime!="AllNight") # MID + CON in dataset
+dframe2d$Regime <- revalue(dframe2d$Regime, c("Control"="Midnight"))
+
+summary(dframe2d)
+
+# figure within Midnight
+p28 <- ggplot(dframe2d,aes(x=Light,y=lSeedWeight))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d28 <- qplot(Light, lSeedWeight, data=dframe2d)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p28, d28, cols=2)
+
+hist(dframe2d$SeedWeight)
+hist(dframe2d$lSeedWeight)
+
+model29 <- lmer(lSeedWeight ~ Light + Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 data = dframe2d)
+
+chkres(model29) # again hint of a pattern...
+
+summary(model29)
+drop1(model29, test = "Chi") 
+
+model29a <- glmmPQL(SeedWeight ~   Light + Pollinators + Distance,
+                   random = list(~1|fPlantNo, ~1|fRound, ~1|fPlot), #Random effects
+                   family = gaussian (link = "log"),
+                   data = dframe2d)
+
+chkres.PQL(model29a)
+
+summary(model29a)
+Anova(model29a, type = "III")
+
+# no effect of light within Midnight
+
+### SO. no effect of light on seed count.
+
+# effect on probability of pollination - driven by regime
+# once pollinated, quality is basically conserved (v. limited evidence that HPS is more disruptive than LED from seed counts within midnight regime)
