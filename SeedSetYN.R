@@ -932,3 +932,122 @@ Anova(model29a, type = "III")
 
 # effect on probability of pollination - driven by regime
 # once pollinated, quality is basically conserved (v. limited evidence that HPS is more disruptive than LED from seed counts within midnight regime)
+
+
+
+
+
+
+
+
+
+      ###### A few more explorations #######
+
+### 1. Is there any difference in the effect of light when you take out diurnal poll's?
+
+dframe1g <- subset(dframe1,Pollinators=="Nocturnal") # Nocturnal only
+summary(dframe1g)
+
+p30n <- ggplot(dframe1g,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d30n <- qplot(Light, SeedSetYN, data=dframe1g)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+p31n <- ggplot(dframe1g,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d31n <- qplot(Regime, SeedSetYN, data=dframe1g)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p30n, d30n, p31n, d31n, cols=2)
+
+# Looking at nocturnal only, the effect seems reduced - this is VERY interesting, so let's repeat for other levels of Pollinators
+
+dframe1h <- subset(dframe1,Pollinators=="Diurnal") # Nocturnal only
+summary(dframe1h)
+
+p30d <- ggplot(dframe1h,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d30d <- qplot(Light, SeedSetYN, data=dframe1h)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+p31d <- ggplot(dframe1h,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d31d <- qplot(Regime, SeedSetYN, data=dframe1h)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p30d, d30d, p31d, d31d, cols=2)
+
+# effect of regime APPEARS GREATER FOR DIURNAL - how can that be?
+
+dframe1i <- subset(dframe1,Pollinators=="Control") # Nocturnal only
+summary(dframe1i)
+
+p30c <- ggplot(dframe1i,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d30c <- qplot(Light, SeedSetYN, data=dframe1i)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+p31c <- ggplot(dframe1i,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d31c <- qplot(Regime, SeedSetYN, data=dframe1i)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p30c, d30c, p31c, d31c, cols=2)
+
+# EVEN with control, with vanishingly low rate of pollination, the effect still appears to exist (though prob non-sig)
+
+dframe1j <- subset(dframe1,Pollinators=="All") # Nocturnal only
+summary(dframe1j)
+
+p30a <- ggplot(dframe1j,aes(x=Light,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d30a <- qplot(Light, SeedSetYN, data=dframe1j)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+p31a <- ggplot(dframe1j,aes(x=Regime,y=SeedSetYN))+
+  stat_summary(fun.y="mean",geom="point",alpha=0.7)
+
+d31a <- qplot(Regime, SeedSetYN, data=dframe1j)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(p30a, d30a, p31a, d31a, cols=2)
+
+# so, effect looks to be there across all subsets of pollinators but most clear-cut for diurnal (which is plain weird).
+# Might be worth checking significance of effect for each, though this will be v. complicated esp. with respect to confounding variables
+
+model30n <- glm(SeedSetYN ~ Light + Regime + Distance,
+                family = binomial(link = "logit"),
+                data = dframe1g)
+
+summary(model30n)
+drop1(model30n, test = "Chi")
+
+model30d <- glm(SeedSetYN ~ Light + Regime + Distance,
+                family = binomial(link = "logit"),
+                data = dframe1h)
+
+summary(model30d)
+drop1(model30d, test = "Chi")
+
+model30c <- glm(SeedSetYN ~ Light + Regime + Distance,
+                family = binomial(link = "logit"),
+                data = dframe1i)
+
+summary(model30c)
+drop1(model30c, test = "Chi")
+
+model30a <- glm(SeedSetYN ~ Light + Regime + Distance,
+                family = binomial(link = "logit"),
+                data = dframe1j)
+
+summary(model30a)
+drop1(model30a, test = "Chi")
+
+# for these regime is significant for day and night separately but NOT when combined
