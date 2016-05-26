@@ -16,6 +16,7 @@ dframe1$fDistance <- factor(dframe1$Distance) # make "Distance" available as a f
 
 dframe1$Regime <- relevel(dframe1$Regime,"Control") # relevel variables related to control level
 dframe1$Pollinators <- relevel(dframe1$Pollinators,"Control")
+dframe1$LitUnlit <- relevel(dframe1$LitUnlit, "Unlit")
 
 summary(dframe1)
 
@@ -69,7 +70,7 @@ d5 <- qplot(Distance, SeedSetYN, data=dframe1)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
 multiplot(p1, d1, p2, d2, p3, d3, p4, d4, p5, d5, cols=5)
-
+multiplot(d1, d2, d4, d5, cols=2)
 
 ### analysis
 
@@ -80,6 +81,9 @@ summary(ano1)
 
 ano2 <- aov(SeedSetYN ~ Regime/Light, dframe1)
 summary(ano2)
+
+ano3 <- aov(SeedSetYN ~ Treatment*Pollinators, dframe1)
+summary(ano3)
 
 # regime appears important, light not, but what about covariates and randeffs...
 
@@ -118,8 +122,10 @@ drop1(model3, test = "Chi")
 
 # model failed to converge - recheck convergence with:
 
-relgrad <- with(model3@optinfo$derivs,solve(Hessian,gradient))
-max(abs(relgrad))
+source("CheckConvergenceFunction.R")
+chkconv(model3)
+
+
 
 # convergence =~ 0.001 - not a huge problem but inspect rand effs - fPlot has very low variance so try removing
 
@@ -172,8 +178,6 @@ chkres(model5) # ok, not amazing, but not final model so not going to worry righ
 # could pool lighting treatments as 'lit':
 # visual inspection of full dataset suggests that this might be problematic; there is a strong risk of Type I error for Light. (But let's try and see!)
 
-dframe1$LitUnlit <- recode(dframe1$Light, "c('HPS','LED')='Lit'; else='Unlit'")
-dframe1$LitUnlit <- relevel(dframe1$LitUnlit, "Unlit")
 
 # figure LitUnlit
 p6 <- ggplot(dframe1,aes(x=LitUnlit,y=SeedSetYN))+
@@ -239,7 +243,7 @@ multiplot(p7, d7, cols=2)
 #glmm
 model9 <- glmer(SeedSetYN ~ Regime + Pollinators + Distance
                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
-                family = binomial (link = "cauchit"),
+                family = binomial (link = "logit"),
                 data = dframe1c)
 
 summary(model9)
@@ -251,6 +255,14 @@ max(abs(relgrad)) # model here is fine with fPlot in
 chkres(model9) # kind of bimodal. worth trying another link function? Done - logit is best option (and not too bad really)
 # bit of a pattern in the binned plot but generally don't need to worry with Bernoulli GLM
 
+# what about interaction?
+model9a <- glmer(SeedSetYN ~ Regime:Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 family = binomial (link = "logit"),
+                 data = dframe1c)
+
+summary(model9a)
+drop1(model9a, test = "Chi")
 
 # looking solely within HPS lighting, there is a significant effect of regime on pollination (driven by AllNight);
 # how about with the new challenger, LED?
@@ -286,6 +298,14 @@ chkres(model10) # residuals fine
 
 # so, with LED also there is a significant effect of regime on pollination (driven by AllNight)
 
+# interaction
+model10a <- glmer(SeedSetYN ~ Regime:Pollinators + Distance
+                 + (1|fPlantNo) + (1|fRound) + (1|fPlot),
+                 family = binomial (link = "logit"),
+                 data = dframe1d)
+
+summary(model10a)
+drop1(model10a, test = "Chi")
 
 ## how about a comparison between LED and HPS? Let's try the same tactic and break up AllNight & Midnight
 
@@ -349,6 +369,30 @@ max(abs(relgrad)) # model here does not converge with fPlot in - so removed (fin
 chkres(model12)
 
 # no significant effect of light within Midnight
+
+# Can we try nesting the effects together?
+
+model12a <- glmer(SeedSetYN ~ LitUnlit/Regime + LitUnlit/Light + Distance
+                  + (1|fPlantNo) + (1|fRound),
+                  family = binomial (link = "logit"),
+                  data=dframe1)
+
+summary(model12a)
+drop1(model12a, test = "Chi")
+
+# model is pretty rank deficient. But supports the effect of regime (as an interaction with lit/unlit) and the similar absence of an effect of light
+
+
+# how about a quadratic term of distance?
+
+model12b <- glmer(SeedSetYN ~ LitUnlit/Regime + LitUnlit/Light + Distance + I(Distance^2)
+                  + (1|fPlantNo) + (1|fRound),
+                  family = binomial (link = "logit"),
+                  data=dframe1)
+
+summary(model12b)
+drop1(model12b, test = "Chi")
+
 
 ### SO. Probability of seed set is affected by:
 #(a) pollinator regime - both diurnal and nocturnal contribute (noct slightly more), with some redundancy.
@@ -429,11 +473,11 @@ multiplot(p11, d11, p12, d12, p13, d13, p14, d14, p15, d15, cols=5) # no obvious
 
 ## nested anova
 
-ano3 <- aov(SeedCount ~ Light*Regime, dframe2)
-summary(ano3)
-
-ano4 <- aov(SeedCount ~ Regime/Light, dframe2)
+ano4 <- aov(SeedCount ~ Light*Regime, dframe2)
 summary(ano4)
+
+ano5 <- aov(SeedCount ~ Regime/Light, dframe2)
+summary(ano5)
 
 # Light appears important, possible Light:Regime interaction too, but what about covariates and randeffs...
 
@@ -746,11 +790,11 @@ multiplot(p20, d20, p21, d21, p22, d22, p23, d23, p24, d24, cols=5) # no obvious
 
 ## nested anova
 
-ano5 <- aov(lSeedWeight ~ Light*Regime, dframe2)
-summary(ano5)
-
-ano6<- aov(lSeedWeight ~ Regime/Light, dframe2)
+ano6 <- aov(lSeedWeight ~ Light*Regime, dframe2)
 summary(ano6)
+
+ano7<- aov(lSeedWeight ~ Regime/Light, dframe2)
+summary(ano7)
 
 # Nothing really stands out
 
@@ -936,118 +980,403 @@ Anova(model29a, type = "III")
 
 
 
-
-
-
-
-
       ###### A few more explorations #######
 
 ### 1. Is there any difference in the effect of light when you take out diurnal poll's?
 
-dframe1g <- subset(dframe1,Pollinators=="Nocturnal") # Nocturnal only
-summary(dframe1g)
+for i in 
 
-p30n <- ggplot(dframe1g,aes(x=Light,y=SeedSetYN))+
+
+
+dframe1noc <- subset(dframe1,Pollinators=="Nocturnal") # Nocturnal only
+summary(dframe1noc)
+
+p30n <- ggplot(dframe1noc,aes(x=Light,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d30n <- qplot(Light, SeedSetYN, data=dframe1g)+
+d30n <- qplot(Light, SeedSetYN, data=dframe1noc)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-p31n <- ggplot(dframe1g,aes(x=Regime,y=SeedSetYN))+
+p31n <- ggplot(dframe1noc,aes(x=Regime,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d31n <- qplot(Regime, SeedSetYN, data=dframe1g)+
+d31n <- qplot(Regime, SeedSetYN, data=dframe1noc)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
 multiplot(p30n, d30n, p31n, d31n, cols=2)
 
 # Looking at nocturnal only, the effect seems reduced - this is VERY interesting, so let's repeat for other levels of Pollinators
 
-dframe1h <- subset(dframe1,Pollinators=="Diurnal") # Nocturnal only
-summary(dframe1h)
+dframe1day <- subset(dframe1,Pollinators=="Diurnal") # Nocturnal only
+summary(dframe1day)
 
-p30d <- ggplot(dframe1h,aes(x=Light,y=SeedSetYN))+
+p30d <- ggplot(dframe1day,aes(x=Light,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d30d <- qplot(Light, SeedSetYN, data=dframe1h)+
+d30d <- qplot(Light, SeedSetYN, data=dframe1day)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-p31d <- ggplot(dframe1h,aes(x=Regime,y=SeedSetYN))+
+p31d <- ggplot(dframe1day,aes(x=Regime,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d31d <- qplot(Regime, SeedSetYN, data=dframe1h)+
+d31d <- qplot(Regime, SeedSetYN, data=dframe1day)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
 multiplot(p30d, d30d, p31d, d31d, cols=2)
 
 # effect of regime APPEARS GREATER FOR DIURNAL - how can that be?
 
-dframe1i <- subset(dframe1,Pollinators=="Control") # Nocturnal only
-summary(dframe1i)
+dframe1con <- subset(dframe1,Pollinators=="Control") # Nocturnal only
+summary(dframe1con)
 
-p30c <- ggplot(dframe1i,aes(x=Light,y=SeedSetYN))+
+p30c <- ggplot(dframe1con,aes(x=Light,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d30c <- qplot(Light, SeedSetYN, data=dframe1i)+
+d30c <- qplot(Light, SeedSetYN, data=dframe1con)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-p31c <- ggplot(dframe1i,aes(x=Regime,y=SeedSetYN))+
+p31c <- ggplot(dframe1con,aes(x=Regime,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d31c <- qplot(Regime, SeedSetYN, data=dframe1i)+
+d31c <- qplot(Regime, SeedSetYN, data=dframe1con)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
 multiplot(p30c, d30c, p31c, d31c, cols=2)
 
 # EVEN with control, with vanishingly low rate of pollination, the effect still appears to exist (though prob non-sig)
 
-dframe1j <- subset(dframe1,Pollinators=="All") # Nocturnal only
-summary(dframe1j)
+dframe1all <- subset(dframe1,Pollinators=="All") # Nocturnal only
+summary(dframe1all)
 
-p30a <- ggplot(dframe1j,aes(x=Light,y=SeedSetYN))+
+p30a <- ggplot(dframe1all,aes(x=Light,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d30a <- qplot(Light, SeedSetYN, data=dframe1j)+
+d30a <- qplot(Light, SeedSetYN, data=dframe1all)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
-p31a <- ggplot(dframe1j,aes(x=Regime,y=SeedSetYN))+
+p31a <- ggplot(dframe1all,aes(x=Regime,y=SeedSetYN))+
   stat_summary(fun.y="mean",geom="point",alpha=0.7)
 
-d31a <- qplot(Regime, SeedSetYN, data=dframe1j)+
+d31a <- qplot(Regime, SeedSetYN, data=dframe1all)+
   stat_summary(fun.data = "mean_cl_boot", colour = "red")
 
 multiplot(p30a, d30a, p31a, d31a, cols=2)
 
-# so, effect looks to be there across all subsets of pollinators but most clear-cut for diurnal (which is plain weird).
+
+
+d32a <- qplot(Treatment, SeedSetYN, data=dframe1all)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+d32n <- qplot(Treatment, SeedSetYN, data=dframe1noc)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+d32d <- qplot(Treatment, SeedSetYN, data=dframe1day)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+d32c <- qplot(Treatment, SeedSetYN, data=dframe1con)+
+  stat_summary(fun.data = "mean_cl_boot", colour = "red")
+
+multiplot(d32n,d32a,d32c,d32d,cols=2)
+multiplot(d31a,d31n,d31d,d31c,cols=2)
+multiplot(d30a,d30n,d30d,d30c,cols=2)
+
+# try some ANOVAs
+
+anonoc <- aov(SeedSetYN ~ Light*Regime, data = dframe1noc)
+summary(anonoc)
+
+anoday <- aov(SeedSetYN ~ Light*Regime, data = dframe1day)
+summary(anoday)
+
+anocon <- aov(SeedSetYN ~ Light*Regime, data = dframe1con)
+summary(anocon)
+
+anoall <- aov(SeedSetYN ~ Light*Regime, data = dframe1all)
+summary(anoall)
+
+
 # Might be worth checking significance of effect for each, though this will be v. complicated esp. with respect to confounding variables
 
 model30n <- glm(SeedSetYN ~ Light + Regime + Distance,
                 family = binomial(link = "logit"),
-                data = dframe1g)
+                data = dframe1noc)
 
 summary(model30n)
 drop1(model30n, test = "Chi")
 
 model30d <- glm(SeedSetYN ~ Light + Regime + Distance,
                 family = binomial(link = "logit"),
-                data = dframe1h)
+                data = dframe1day)
 
 summary(model30d)
 drop1(model30d, test = "Chi")
 
 model30c <- glm(SeedSetYN ~ Light + Regime + Distance,
                 family = binomial(link = "logit"),
-                data = dframe1i)
+                data = dframe1con)
 
 summary(model30c)
 drop1(model30c, test = "Chi")
 
 model30a <- glm(SeedSetYN ~ Light + Regime + Distance,
                 family = binomial(link = "logit"),
-                data = dframe1j)
+                data = dframe1all)
 
 summary(model30a)
 drop1(model30a, test = "Chi")
 
 # for these regime is significant for day and night separately but NOT when combined
+
+
+
+
+
+
+
+
+
+### let's try some figures
+
+# within AllNight, HPS vs LED
+
+summary(model11)
+
+newdata11 <- expand.grid(Light=(c("CON","HPS","LED")),
+                         Distance=10,
+                         Pollinators=(c("All","Control","Diurnal","Nocturnal")),
+                         SeedSetYN=1)
+
+mm11 <- model.matrix(terms(model11),newdata11)
+newdata11$SeedSetYN <- predict(model11, newdata = newdata11, level=0, type = "response", re.form=NA)
+newdata11$LogOdds <- predict(model11, newdata = newdata11, level=0, re.form=NA)
+
+#odds-ratio conf.ints.
+pvar11 <- diag(mm11 %*% tcrossprod(vcov(model11),mm11))
+newdata11 <- data.frame(
+  newdata11
+  , plo = newdata11$LogOdds-1.96*sqrt(pvar11)
+  , phi = newdata11$LogOdds+1.96*sqrt(pvar11)
+)
+
+o11 <- ggplot(newdata11,
+             aes(x=Light, y=LogOdds, fill=Light))+
+  ylab("Probability of seed set") + xlab("Lighting type")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","goldenrod","white"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  geom_errorbar(aes(ymin = plo, ymax = phi),
+                colour="black", size=0.8, width=0.5)
+
+o11
+
+p11 <- ggplot(newdata11,
+              aes(x=Light, y=SeedSetYN, fill=Light))+
+  ylab("Probability of seed set") + xlab("Lighting type")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","goldenrod","white"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  ylim(0, 1)
+
+p11
+
+# within Midnight, HPS vs LED
+
+summary(model12)
+
+newdata12 <- expand.grid(Light=(c("CON","HPS","LED")),
+                         Distance=10,
+                         Pollinators=(c("All","Control","Diurnal","Nocturnal")),
+                         SeedSetYN=1)
+
+mm12 <- model.matrix(terms(model12),newdata12)
+newdata12$SeedSetYN <- predict(model12, newdata = newdata12, level=0, type = "response", re.form=NA)
+newdata12$LogOdds <- predict(model12, newdata = newdata12, level=0, re.form=NA)
+
+#odds-ratio conf.ints.
+pvar12 <- diag(mm12 %*% tcrossprod(vcov(model12),mm12))
+newdata12 <- data.frame(
+  newdata12
+  , plo = newdata12$LogOdds-1.96*sqrt(pvar12)
+  , phi = newdata12$LogOdds+1.96*sqrt(pvar12)
+)
+
+o12 <- ggplot(newdata12,
+              aes(x=Light, y=LogOdds, fill=Light))+
+  ylab("Probability of seed set") + xlab("Lighting type")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","goldenrod","white"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  geom_errorbar(aes(ymin = plo, ymax = phi),
+                colour="black", size=0.8, width=0.5)
+
+o12
+
+p12 <- ggplot(newdata12,
+              aes(x=Light, y=SeedSetYN, fill=Light))+
+  ylab("Probability of seed set") + xlab("Lighting type")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","goldenrod","white"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  ylim(0, 1)
+
+p12
+
+
+# within HPS, AllNight vs PartNight
+
+summary(model9)
+
+
+# dframe for model predictions
+newdata9 <- expand.grid(Regime=(c("None","AllNight","Midnight")),
+                         Distance=10,
+                         Pollinators=(c("All","Control","Diurnal","Nocturnal")),
+                         SeedSetYN=1)
+
+mm9 <- model.matrix(terms(model9),newdata9)
+newdata9$SeedSetYN <- predict(model9, newdata = newdata9, level=0, type = "response", re.form=NA)
+newdata9$LogOdds <- predict(model9, newdata = newdata9, level=0, re.form=NA)
+
+#odds-ratio conf.ints.
+pvar9 <- diag(mm9 %*% tcrossprod(vcov(model9),mm9))
+newdata9 <- data.frame(
+  newdata9
+  , plo = newdata9$LogOdds-1.96*sqrt(pvar9)
+  , phi = newdata9$LogOdds+1.96*sqrt(pvar9)
+)
+
+
+
+o9 <- ggplot(newdata9,
+              aes(x=Regime, y=LogOdds, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  geom_errorbar(aes(ymin = plo, ymax = phi),
+                colour="black", size=0.8, width=0.5)
+
+o9
+
+p9 <- ggplot(newdata9,
+              aes(x=Regime, y=SeedSetYN, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  ylim(0, 1)
+
+p9
+
+
+# within LED, AllNight vs PartNight
+
+summary(model10)
+
+
+# dframe for model predictions
+newdata10 <- expand.grid(Regime=(c("None","AllNight","Midnight")),
+                         Distance=10,
+                         Pollinators=(c("All","Control","Diurnal","Nocturnal")),
+                         SeedSetYN=1)
+
+mm10 <- model.matrix(terms(model10),newdata10)
+newdata10$SeedSetYN <- predict(model10, newdata = newdata10, level=0, type = "response", re.form=NA)
+newdata10$LogOdds <- predict(model10, newdata = newdata10, level=0, re.form=NA)
+
+#odds-ratio conf.ints.
+pvar10 <- diag(mm10 %*% tcrossprod(vcov(model10),mm10))
+newdata10 <- data.frame(
+  newdata10
+  , plo = newdata10$LogOdds-1.96*sqrt(pvar10)
+  , phi = newdata10$LogOdds+1.96*sqrt(pvar10)
+)
+
+
+
+
+o10 <- ggplot(newdata10,
+              aes(x=Regime, y=LogOdds, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  geom_errorbar(aes(ymin = plo, ymax = phi),
+                colour="black", size=0.8, width=0.5)
+
+o10
+
+p10 <- ggplot(newdata10,
+              aes(x=Regime, y=SeedSetYN, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  ylim(0, 1)
+
+p10
+
+
+## all figs - probability
+
+p11 #AllNight HPS vs LED
+p12 #Midnight HPS vs LED
+p9  #HPS All vs Mid
+p10 #LED All vs Mid
+
+## all figs - log odds
+
+o11 #AllNight HPS vs LED
+o12 #Midnight HPS vs LED
+o9  #HPS All vs Mid
+o10 #LED All vs Mid
+
+
+
+
+
+# play with interaction - within HPS, AllNight vs PartNight
+
+summary(model9a)
+
+
+# dframe for model predictions
+newdata9a <- expand.grid(Regime=(c("None","AllNight","Midnight")),
+                        Distance=10,
+                        Pollinators=(c("All","Control","Diurnal","Nocturnal")),
+                        SeedSetYN=1)
+
+mm9a <- model.matrix(terms(model9a),newdata9a)
+newdata9a$SeedSetYN <- predict(model9a, newdata = newdata9a, level=0, type = "response", re.form=NA)
+newdata9a$LogOdds <- predict(model9a, newdata = newdata9a, level=0, re.form=NA)
+
+#odds-ratio conf.ints.
+pvar9a <- diag(mm9a %*% tcrossprod(vcov(model9a),mm9a))
+newdata9a <- data.frame(
+  newdata9a
+  , plo = newdata9a$LogOdds-1.96*sqrt(pvar9a)
+  , phi = newdata9a$LogOdds+1.96*sqrt(pvar9a)
+)
+
+
+
+o9 <- ggplot(newdata9,
+             aes(x=Regime, y=LogOdds, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  geom_errorbar(aes(ymin = plo, ymax = phi),
+                colour="black", size=0.8, width=0.5)
+
+o9
+
+p9a <- ggplot(newdata9a,
+             aes(x=Regime, y=SeedSetYN, fill=Regime))+
+  ylab("Probability of seed set") + xlab("Lighting regime")+
+  geom_bar(colour="black",stat="identity")+
+  scale_fill_manual(values=c("black","white","gray60"))+
+  facet_wrap(~ Pollinators, ncol = 2)+
+  ylim(0, 1)
+
+p9a
