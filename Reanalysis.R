@@ -2,7 +2,6 @@
 #  Binomial logistic regression of seed set #
 #############################################
 
-.libPaths(c("C\\rlib", .libPaths()))
 setwd("C:\\Users\\461776\\Dropbox\\PhD Hull\\Work\\Data and analysis\\Chapter 3\\Chapter-3")
 dframe1 <- read.csv("Data\\SeedSetBinom.csv")
 # dframe1 <- read.csv(file.choose())
@@ -69,11 +68,11 @@ source("MultiplotFunction.R") # function for panel plots in ggplot2 - see http:/
 
 summary(dframe1)
 
-model1 <- lm(cbind(Successes,Failures) ~ Pollinators,
-             data = dframe1)
+model1 <- glm(cbind(Successes,Failures) ~ Pollinators,
+             data = dframe1, family = binomial)
 
 summary(model1)
-anova(model1)
+drop1(model1, test = "Chi")
 
 # look only within unlit treatment
 
@@ -91,11 +90,11 @@ dframe1cc <- subset(dframe1c,Pollinators=="Control")
 summary(dframe1cc)
 
 
-model1c <- lm(cbind(Successes,Failures) ~ Pollinators,
-                data = dframe1c)
+model1c <- glm(cbind(Successes,Failures) ~ Pollinators,
+                data = dframe1c, family = binomial)
 
 summary(model1c)
-anova(model1c)  # essentially a MANOVA hence the output giving Pillai value
+drop1(model1c, test = "Chi")
 
 # now, can't do post-hoc tests on repeated measures so let's bring in the YN coded dataset...
 
@@ -109,8 +108,6 @@ modelYN <- lm(SeedSetYN ~ Pollinators,
 summary(modelYN)
 anova(modelYN)
 
-library(modelYN)
-coefplot(modelYN)
 
 #it does so set up the Tukey test
 
@@ -180,6 +177,8 @@ model1s <- glmer(SeedCount ~ Pollinators + Distance
 summary(model1s)
 drop1(model1s, test = "Chi")
 
+summary(glht(model1s, mcp(Pollinators="Tukey")))
+
 
 #Restrict to unlit
 dframe1sc <- subset(dframe1s,Light=="CON")
@@ -194,6 +193,9 @@ model1sc <- glmer(SeedCount ~ Pollinators + Distance
                  data = dframe1sc)
 summary(model1sc)
 drop1(model1sc, test = "Chi")
+
+summary(glht(model1sc, mcp(Pollinators="Tukey")))
+
 
 ### Seed weight
 
@@ -210,6 +212,8 @@ model1w <- lmer(lSeedWeight ~ Pollinators + Distance
 summary(model1w)
 drop1(model1w, test = "Chi")
 
+summary(glht(model1w, mcp(Pollinators="Tukey")))
+
 
 # restrict to unlit
 
@@ -225,6 +229,8 @@ model1wc <- lmer(lSeedWeight ~ Pollinators + Distance
 
 summary(model1wc)
 drop1(model1wc, test = "Chi")
+
+summary(glht(model1w, mcp(Pollinators="Tukey")))
 
 
 ### figures
@@ -1047,3 +1053,13 @@ g3a <- ggplot(newdata3a,
 
 g3a
 
+
+
+############################ development #################################
+
+
+dframeYNcon <- subset(dframeYN,Pollinators=="Control")
+summary(dframeYNcon)
+
+dframeYNcon$SeedSetYN <- factor(dframeYNcon$SeedSetYN)
+summary(dframeYNcon$SeedSetYN)
